@@ -1,0 +1,32 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = "postgresql://neondb_owner:npg_c5N7FHSqMVIb@ep-rough-haze-aeckutfe-pooler.c-2.us-east-2.aws.neon.tech/neondb?sslmode=require"
+}
+
+model Product {
+  id                Int     @id @default(autoincrement())
+  itemId            String     @unique
+  title             String?
+  oemReference      String?
+  price             Float?
+  currency          String?    @db.VarChar(8)
+  url               String?
+  seller            String?
+  listingStartDate  DateTime?  @db.Timestamptz
+  status            String     @default("ACTIVE") @db.VarChar(16)
+  endDate           DateTime?  @db.Timestamptz
+  closedReason      String?
+  createdAt         DateTime   @default(now()) @db.Timestamptz
+  updatedAt         DateTime   @default(now()) @db.Timestamptz
+}
+
