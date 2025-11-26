@@ -3,7 +3,7 @@ import productRoutes from './routes/productRoutes.js';
 import categorieRoutes from './routes/categorieRoutes.js';
 import dotenv from 'dotenv';
 dotenv.config();
-
+let port = process.env.PORT || 1514;
 const app = express();
 app.use(express.json());
 
@@ -11,4 +11,4 @@ app.use('/products', productRoutes);
 app.use('/categorie', categorieRoutes);
 
 
-app.listen(1514, () => console.log('Server running on port 3000'));
+app.listen(port, () => console.log(`Server running on port link: http://localhost:${port}`));

@@ -44,10 +44,10 @@ router.post('/product', async (req, res) => {
 });
 
 // Récupérer tous les produits
-router.get('/', async (req, res) => {
+router.get('/all', async (req, res) => {
     try {
         const products = await productService.getProducts();
-        res.json(serializeBigInt(product));
+        res.json(serializeBigInt(products));
     } catch (e) {
         res.status(500).json({error: e.message});
     }
