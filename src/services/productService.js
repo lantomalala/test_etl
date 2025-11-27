@@ -66,3 +66,24 @@ export async function upsertProduct(data) {
     create: data
   });
 }
+
+// Récupérer tous les produits avec une URL
+export async function getProductsWithUrl() {
+  return prisma.product.findMany({
+    where: {
+      url: { not: null }
+    }
+  });
+}
+
+// Mettre à jour le status et endDate d'un produit
+export async function updateProductStatus(id, status, endDate = null) {
+  return prisma.product.update({
+    where: { id: BigInt(id) },
+    data: {
+      status,
+      endDate: endDate ? new Date(endDate) : null,
+      updatedAt: new Date()
+    }
+  });
+}
