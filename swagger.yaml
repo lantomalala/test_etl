@@ -23,7 +23,7 @@ info:
 servers:
   - url: http://localhost:1514
     description: Serveur de développement local
-  - url: https://api.example.com
+  - url: https://gestion-de-produits.onrender.com
     description: Serveur de production
 
 tags:
