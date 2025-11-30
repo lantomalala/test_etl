@@ -1,0 +1,676 @@
+openapi: 3.0.3
+info:
+  title: API ETL - Scraping eBay
+  description: |
+    API pour le scraping et la gestion de produits eBay.
+    
+    Cette API permet de :
+    - Scraper des produits individuels ou des catégories complètes depuis eBay
+    - Gérer les produits dans la base de données (CRUD)
+    - Rescraper les produits pour mettre à jour les prix et vérifier leur disponibilité
+    
+    **Concepts importants :**
+    - **Status des produits** : ACTIVE (en vente) ou ENDED (non disponible)
+    - **Délais** : Les routes de scraping attendent 10 secondes entre chaque requête
+    - **Timeout** : Les requêtes de scraping ont un timeout de 30 secondes
+  version: 1.0.0
+  contact:
+    name: Justin Lantomalala
+    email: support@example.com
+  license:
+    name: ISC
+
+servers:
+  - url: http://localhost:1514
+    description: Serveur de développement local
+  - url: https://api.example.com
+    description: Serveur de production
+
+tags:
+  - name: Produits
+    description: Gestion des produits (CRUD)
+  - name: Catégorie
+    description: Scraping de catégories complètes
+  - name: Rescrape
+    description: Rescraping des produits existants
+
+paths:
+  /products/product:
+    post:
+      tags:
+        - Produits
+      summary: Créer un produit en scrapant une URL
+      description: |
+        Scrape une URL eBay et crée un nouveau produit dans la base de données.
+        Les données sont récupérées depuis l'API de scraping externe.
+      operationId: createProduct
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - url
+              properties:
+                url:
+                  type: string
+                  format: uri
+                  description: URL eBay du produit à scraper
+                  example: "https://www.ebay.com/itm/123456789"
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                url:
+                  type: string
+                  format: uri
+      parameters:
+        - name: url
+          in: query
+          description: URL eBay du produit (alternative au body)
+          required: false
+          schema:
+            type: string
+            format: uri
+      responses:
+        '200':
+          description: Produit créé avec succès
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '500':
+          description: Erreur lors du scraping ou de la création
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /products/all:
+    get:
+      tags:
+        - Produits
+      summary: Récupérer tous les produits
+      description: Récupère la liste complète de tous les produits enregistrés dans la base de données.
+      operationId: getAllProducts
+      responses:
+        '200':
+          description: Liste de tous les produits
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Product'
+        '500':
+          description: Erreur serveur
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /products/{search}:
+    get:
+      tags:
+        - Produits
+      summary: Rechercher un produit
+      description: |
+        Recherche un produit par ID, itemId ou titre (recherche partielle).
+        La recherche est intelligente : essaie d'abord par ID numérique, puis par itemId, puis par titre.
+      operationId: searchProduct
+      parameters:
+        - name: search
+          in: path
+          required: true
+          description: ID numérique, itemId ou titre du produit
+          schema:
+            type: string
+          examples:
+            itemId:
+              value: "123456789"
+              summary: Recherche par itemId
+            id:
+              value: "1"
+              summary: Recherche par ID
+            title:
+              value: "voiture"
+              summary: Recherche par titre (partiel)
+      responses:
+        '200':
+          description: Produit trouvé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '404':
+          description: Produit non trouvé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Erreur serveur
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    
+    put:
+      tags:
+        - Produits
+      summary: Mettre à jour un produit
+      description: Met à jour les informations d'un produit existant par son ID. Seuls les champs fournis seront mis à jour.
+      operationId: updateProduct
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID du produit à mettre à jour
+          schema:
+            type: string
+            pattern: '^\d+$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductUpdate'
+      responses:
+        '200':
+          description: Produit mis à jour avec succès
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '500':
+          description: Erreur lors de la mise à jour
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    
+    delete:
+      tags:
+        - Produits
+      summary: Supprimer un produit
+      description: Supprime un produit par ID ou itemId.
+      operationId: deleteProduct
+      parameters:
+        - name: search
+          in: path
+          required: true
+          description: ID numérique ou itemId du produit à supprimer
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Produit supprimé avec succès
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Produit supprimé"
+                  product:
+                    $ref: '#/components/schemas/Product'
+        '404':
+          description: Produit non trouvé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Erreur serveur
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /categorie:
+    post:
+      tags:
+        - Catégorie
+      summary: Scraper une catégorie complète
+      description: |
+        Scrape tous les produits d'une catégorie eBay et les ajoute à la base de données.
+        
+        **Note importante :** Cette opération peut prendre beaucoup de temps selon le nombre de produits dans la catégorie.
+        Un délai de 10 secondes est appliqué entre chaque scraping pour éviter la surcharge.
+      operationId: scrapeCategory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - categorie
+              properties:
+                categorie:
+                  type: string
+                  format: uri
+                  description: URL de la catégorie eBay à scraper
+                  example: "https://www.ebay.com/b/..."
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                categorie:
+                  type: string
+                  format: uri
+      parameters:
+        - name: categorie
+          in: query
+          description: URL de la catégorie (alternative au body)
+          required: false
+          schema:
+            type: string
+            format: uri
+      responses:
+        '200':
+          description: Catégorie scrapée avec succès
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total:
+                    type: integer
+                    description: Nombre total de produits traités
+                    example: 50
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        index:
+                          type: integer
+                          example: 1
+                        total:
+                          type: integer
+                          example: 50
+                        product_link:
+                          type: object
+                          properties:
+                            link:
+                              type: string
+                              format: uri
+                        status:
+                          type: string
+                          example: "traité avec succès"
+        '400':
+          description: Paramètre categorie manquant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Erreur lors du scraping
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /rescrape/all:
+    post:
+      tags:
+        - Rescrape
+      summary: Rescraper tous les produits
+      description: |
+        Rescrape tous les produits qui ont une URL dans la base de données.
+        
+        **Comportement :**
+        - Si le scraping réussit : met à jour les prix si changés, met le status à ACTIVE (ou le remet à ACTIVE s'il était ENDED)
+        - Si le scraping échoue : change le status en ENDED et met à jour endDate
+        
+        **Note importante :** Cette opération peut prendre beaucoup de temps selon le nombre de produits.
+        Un délai de 10 secondes est appliqué entre chaque scraping.
+      operationId: rescrapeAllProducts
+      responses:
+        '200':
+          description: Rescraping terminé
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Rescraping terminé: 45 succès, 5 échecs, 12 prix mis à jour"
+                  results:
+                    $ref: '#/components/schemas/RescrapeAllResults'
+        '500':
+          description: Erreur lors du rescraping
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /rescrape/one:
+    post:
+      tags:
+        - Rescrape
+      summary: Rescraper un seul produit
+      description: |
+        Rescrape un seul produit soit par son itemId soit par une URL directe.
+        
+        **Comportement :**
+        - Si le produit existe dans la DB et le scraping réussit : met à jour les prix, met le status à ACTIVE
+        - Si le scraping échoue et le produit existe : change le status en ENDED
+        - Si le produit n'existe pas dans la DB : retourne les données scrapées sans créer le produit
+      operationId: rescrapeOneProduct
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                itemId:
+                  type: string
+                  description: itemId du produit à rescraper
+                  example: "123456789"
+                url:
+                  type: string
+                  format: uri
+                  description: URL directe du produit à scraper
+                  example: "https://www.ebay.com/itm/123456789"
+      parameters:
+        - name: itemId
+          in: query
+          description: itemId du produit (alternative au body)
+          required: false
+          schema:
+            type: string
+        - name: url
+          in: query
+          description: URL du produit (alternative au body)
+          required: false
+          schema:
+            type: string
+            format: uri
+      responses:
+        '200':
+          description: Produit rescrapé avec succès ou données scrapées
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    properties:
+                      message:
+                        type: string
+                        example: "Produit rescrapé avec succès"
+                      product:
+                        $ref: '#/components/schemas/Product'
+                      priceChanged:
+                        type: boolean
+                        description: Indique si le prix a changé
+                      oldPrice:
+                        $ref: '#/components/schemas/Price'
+                      newPrice:
+                        $ref: '#/components/schemas/Price'
+                  - type: object
+                    properties:
+                      message:
+                        type: string
+                        example: "Produit scrapé mais non trouvé dans la base de données"
+                      scrapedData:
+                        type: object
+                        description: Données scrapées du produit
+                      note:
+                        type: string
+                        example: "Utilisez la route POST /products/product pour créer le produit"
+        '400':
+          description: itemId ou url requis
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "itemId ou url requis"
+                  message:
+                    type: string
+        '404':
+          description: Produit non trouvé (lors de la recherche par itemId)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Produit non trouvé"
+                  itemId:
+                    type: string
+        '500':
+          description: Erreur lors du rescraping
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Erreur lors du rescraping"
+                  reason:
+                    type: string
+                    example: "Lien introuvable (404)"
+
+components:
+  schemas:
+    Product:
+      type: object
+      description: Modèle de produit
+      properties:
+        id:
+          type: string
+          description: ID unique du produit (BigInt sérialisé en string)
+          example: "1"
+        itemId:
+          type: string
+          description: ID eBay du produit
+          example: "123456789"
+        title:
+          type: string
+          nullable: true
+          description: Titre du produit
+          example: "Titre du produit"
+        oemReference:
+          type: string
+          nullable: true
+          description: Référence OEM
+        priceNet:
+          type: number
+          format: float
+          nullable: true
+          description: Prix net du produit
+          example: 100.50
+        priceBrut:
+          type: number
+          format: float
+          nullable: true
+          description: Prix brut (avec taxes)
+          example: 120.00
+        currency:
+          type: string
+          nullable: true
+          description: Devise (EUR, USD, etc.)
+          maxLength: 8
+          example: "EUR"
+        url:
+          type: string
+          format: uri
+          nullable: true
+          description: URL eBay du produit
+        images:
+          type: array
+          items:
+            type: string
+            format: uri
+          description: Liste des URLs des images du produit
+          example: ["https://example.com/image1.jpg", "https://example.com/image2.jpg"]
+        seller:
+          type: object
+          nullable: true
+          description: Informations sur le vendeur (JSON)
+        listingStartDate:
+          type: string
+          format: date-time
+          nullable: true
+          description: Date de début de l'annonce
+        status:
+          type: string
+          enum: [ACTIVE, ENDED]
+          default: ACTIVE
+          description: Statut du produit (ACTIVE = en vente, ENDED = non disponible)
+          maxLength: 16
+          example: "ACTIVE"
+        endDate:
+          type: string
+          format: date-time
+          nullable: true
+          description: Date de fin (si status = ENDED)
+        closedReason:
+          type: string
+          nullable: true
+          description: Raison de la fermeture
+        createdAt:
+          type: string
+          format: date-time
+          description: Date de création
+        updatedAt:
+          type: string
+          format: date-time
+          description: Date de dernière mise à jour
+
+    ProductUpdate:
+      type: object
+      description: Schéma pour la mise à jour d'un produit (tous les champs sont optionnels)
+      properties:
+        title:
+          type: string
+        oemReference:
+          type: string
+        priceNet:
+          type: number
+          format: float
+        priceBrut:
+          type: number
+          format: float
+        currency:
+          type: string
+          maxLength: 8
+        url:
+          type: string
+          format: uri
+        images:
+          type: array
+          items:
+            type: string
+            format: uri
+        seller:
+          type: object
+        listingStartDate:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [ACTIVE, ENDED]
+        endDate:
+          type: string
+          format: date-time
+        closedReason:
+          type: string
+
+    Price:
+      type: object
+      description: Structure de prix
+      properties:
+        net:
+          type: number
+          format: float
+          nullable: true
+          example: 100.50
+        brut:
+          type: number
+          format: float
+          nullable: true
+          example: 120.00
+        currency:
+          type: string
+          nullable: true
+          example: "EUR"
+
+    RescrapeAllResults:
+      type: object
+      description: Résultats du rescraping de tous les produits
+      properties:
+        success:
+          type: integer
+          description: Nombre de produits rescrapés avec succès
+          example: 45
+        failed:
+          type: integer
+          description: Nombre de produits en échec
+          example: 5
+        updated:
+          type: integer
+          description: Nombre de produits dont le prix a été mis à jour
+          example: 12
+        details:
+          type: array
+          items:
+            oneOf:
+              - type: object
+                properties:
+                  productId:
+                    type: string
+                    example: "1"
+                  itemId:
+                    type: string
+                    example: "123456789"
+                  status:
+                    type: string
+                    enum: [success, failed, skipped]
+                    example: "success"
+                  priceChanged:
+                    type: boolean
+                    example: true
+                  oldPrice:
+                    $ref: '#/components/schemas/Price'
+                  newPrice:
+                    $ref: '#/components/schemas/Price'
+              - type: object
+                properties:
+                  productId:
+                    type: string
+                    example: "2"
+                  itemId:
+                    type: string
+                    example: "987654321"
+                  status:
+                    type: string
+                    enum: [failed, skipped]
+                    example: "failed"
+                  reason:
+                    type: string
+                    example: "Lien introuvable (404)"
+                  oldStatus:
+                    type: string
+                    example: "ACTIVE"
+
+    Error:
+      type: object
+      description: Structure d'erreur standard
+      properties:
+        error:
+          type: string
+          description: Message d'erreur
+          example: "Produit non trouvé"
+
